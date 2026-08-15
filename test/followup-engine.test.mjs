@@ -1320,8 +1320,8 @@ test("distinct store wrappers over one backend let only one engine perform a gat
   }
 
   assert.equal(actions.length, 1);
-  assert.equal(storage.data.instagramFollowupState.history.length, 1);
-  assert.equal(storage.data.instagramFollowupState.candidates[0].status, "followed");
+  assert.equal(storage.data.instagramGrowthAutopilotState.history.length, 1);
+  assert.equal(storage.data.instagramGrowthAutopilotState.candidates[0].status, "followed");
 });
 
 test("respects a foreign lease until its persisted expiry and then takes ownership", async () => {
@@ -1547,7 +1547,7 @@ test("distinct wrappers serialize settings behind a gated action without losing 
   await waitUntil(() => actionStarted, "expected the leased action to reach its gate");
   const saveSettings = settingsEngine.saveSettings({ batchSize: 25, unfollowDelayDays: 3 });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(storage.data.instagramFollowupState.settings.batchSize, 50);
+  assert.equal(storage.data.instagramGrowthAutopilotState.settings.batchSize, 50);
 
   release();
   await Promise.all([action, saveSettings]);
@@ -2454,7 +2454,7 @@ test("persists complete immutable terminal history snapshots in raw storage", as
 
   await engine.runDueWork();
 
-  assert.deepEqual(storage.data.instagramFollowupState.history[0], {
+  assert.deepEqual(storage.data.instagramGrowthAutopilotState.history[0], {
     candidateId: "instagram:alice",
     action: "follow",
     kind: "follow",
@@ -2465,8 +2465,8 @@ test("persists complete immutable terminal history snapshots in raw storage", as
     timestamp: START,
     at: START,
   });
-  storage.data.instagramFollowupState.candidates[0].handle = "renamed";
-  assert.equal(storage.data.instagramFollowupState.history[0].handle, "alice");
+  storage.data.instagramGrowthAutopilotState.candidates[0].handle = "renamed";
+  assert.equal(storage.data.instagramGrowthAutopilotState.history[0].handle, "alice");
 });
 
 test("schedules the earliest future unfollow when automation is otherwise idle", async () => {

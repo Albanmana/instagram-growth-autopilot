@@ -12,11 +12,12 @@
     "scripting",
     "storage",
     "alarms",
-    "sidePanel"
+    "sidePanel",
+    "notifications",
+    "unlimitedStorage"
   ],
   "host_permissions": [
-    "https://www.instagram.com/*",
-    "http://127.0.0.1/*"
+    "https://www.instagram.com/*"
   ],
   "background": {
     "service_worker": "background.js",

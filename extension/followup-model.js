@@ -453,7 +453,7 @@ export function applyActionOutcome(state, action, outcome, now = new Date()) {
 export function buildLocalExport(state) {
   assertState(state);
   return {
-    version: 1,
+    version: state.version === 2 ? 2 : 1,
     settings: pickFields(state.settings, SETTINGS_EXPORT_FIELDS),
     sources: (state.sources || []).map((source) => pickFields(source, SOURCE_EXPORT_FIELDS)),
     candidates: state.candidates.map((candidate) => pickFields(candidate, CANDIDATE_EXPORT_FIELDS)),

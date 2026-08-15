@@ -1,14 +1,12 @@
 import { createFollowupEngine } from "./followup-engine.js";
 import { normalizeSourceInput } from "./followup-model.js";
 import { createFollowupStore } from "./followup-store.js";
-import { createFollowupRemoteStore } from "./followup-remote-store.js";
-import { createFollowupServiceClient } from "./followup-service-client.js";
-import { createFollowupConnectionStore } from "./followup-connection-store.js";
-import { createLiveAcceleratedTest, LIVE_TEST_SOURCE_LIMIT } from "./live-accelerated-test.js";
+import { createFollowupHealth } from "./followup-health.js";
 import { performInstagramRelationshipAction } from "./instagram-follow-actions.js";
 import { createInstagramFollowers } from "./instagram-followers.js";
 
 export const INSTAGRAM_FOLLOWUP_NEXT_WORK = "INSTAGRAM_FOLLOWUP_NEXT_WORK";
+export const INSTAGRAM_GROWTH_RETRY = "INSTAGRAM_GROWTH_RETRY";
 
 const TAB_LOAD_TIMEOUT_MS = 30_000;
 const LOCAL_MESSAGE_TYPES = new Set([
@@ -25,10 +23,10 @@ const LOCAL_MESSAGE_TYPES = new Set([
   "STOP_AUTO",
   "SAVE_FOLLOWUP_SETTINGS",
   "EXPORT_FOLLOWUP_STATE",
+  "IMPORT_FOLLOWUP_STATE",
   "RESET_FOLLOWUP_STATE",
-  "PAIR_LOCAL_FOLLOWUP_SERVICE",
-  "GET_LOCAL_FOLLOWUP_CONNECTION",
-  "START_LIVE_ACCELERATED_TEST",
+  "GET_FOLLOWUP_HEALTH",
+  "RETRY_FOLLOWUP_WORK",
 ]);
 
 function errorMessage(error) {
@@ -56,16 +54,6 @@ async function verifyScheduledAlarm(chromeApi, state) {
   }
   await alarms.create(INSTAGRAM_FOLLOWUP_NEXT_WORK, { when: plannedMs });
   return { status: "rearmed", plannedAt, alarmAt: plannedAt };
-}
-
-function isUninitializedRemoteState(state) {
-  return Boolean(state)
-    && state.automationEnabled !== true
-    && Array.isArray(state.sources) && state.sources.length === 0
-    && Array.isArray(state.candidates) && state.candidates.length === 0
-    && Array.isArray(state.history) && state.history.length === 0
-    && state.run?.phase === "idle"
-    && Object.keys(state.settings || {}).length === 0;
 }
 
 function instagramSessionIsAvailable(url) {
@@ -257,47 +245,17 @@ export function composeLocalRuntime(chromeApi, log, {
   return { engine, store };
 }
 
-export function composeRemoteRuntime(chromeApi, log, {
-  connection,
-  liveTest,
-  createClient = (options) => createFollowupServiceClient(options),
-  createStore = (client) => createFollowupRemoteStore(client),
-  createTabs = (api) => createChromeTabGateway(api),
-  createFollowers = (dependencies) => createInstagramFollowers(dependencies),
-  createRelationshipGateway = (gateway) => createInstagramRelationshipGateway(gateway),
-  createEngine = (dependencies) => createFollowupEngine({ ...dependencies, balancedCycles: true }),
-} = {}) {
-  const client = createClient(connection);
-  const store = createStore(client);
-  const tabs = createTabs(chromeApi);
-  const followers = createFollowers({ openTabAndWait: tabs.openTabAndWait, executeScript: tabs.executeScript, closeTab: tabs.closeTab, log });
-  const engine = createEngine({
-    store,
-    collectFollowers: followers.collectFollowers,
-    collectOwnFollowerHandles: followers.collectOwnFollowerHandles,
-    collectAndFollowFollowers: followers.collectAndFollowFollowers,
-    performAction: createRelationshipGateway({
-      ...tabs,
-      ownHandle: connection.normalizedHandle,
-      getOwnHandle: connection.normalizedHandle
-        ? undefined
-        : async () => (await client.getAccount()).normalizedHandle,
-    }),
-    schedule: (at, _name, options) => chromeApi.alarms.create(INSTAGRAM_FOLLOWUP_NEXT_WORK, {
-      when: (liveTest ? liveTest.toAlarmTime(at, options) : at).getTime(),
-    }),
-    clearSchedule: () => chromeApi.alarms.clear(INSTAGRAM_FOLLOWUP_NEXT_WORK),
-    ...(liveTest ? { now: () => liveTest.now() } : {}),
-  });
-  return { engine, store, client };
-}
-
-async function handleLocalIntent(message, { chromeApi, engine, store }) {
+async function handleLocalIntent(message, { chromeApi, engine, store, health }) {
   const payload = message.payload || {};
   switch (message.type) {
     case "GET_FOLLOWUP_STATE": {
       const state = await engine.getState();
-      return { ok: true, state, scheduler: await verifyScheduledAlarm(chromeApi, state) };
+      return {
+        ok: true,
+        state,
+        scheduler: await verifyScheduledAlarm(chromeApi, state),
+        health: await health?.get(),
+      };
     }
     case "ADD_SOURCE": {
       const source = await engine.addSource(payload.input, payload.limit);
@@ -355,6 +313,17 @@ async function handleLocalIntent(message, { chromeApi, engine, store }) {
     }
     case "EXPORT_FOLLOWUP_STATE":
       return { ok: true, json: await store.exportJson() };
+    case "IMPORT_FOLLOWUP_STATE": {
+      await engine.stop();
+      const state = await store.importJson(payload.json);
+      await engine.reconcileStartup({ serviceWorkerActivated: true });
+      return {
+        ok: true,
+        state,
+        scheduler: await verifyScheduledAlarm(chromeApi, state),
+        health: await health?.get(),
+      };
+    }
     case "RESET_FOLLOWUP_STATE": {
       await engine.stop();
       await store.reset();
@@ -369,7 +338,7 @@ export function installFollowupBackground({
   chromeApi = globalThis.chrome,
   engine: providedEngine,
   store: providedStore,
-  remoteConnection,
+  health: providedHealth,
   log = (message) => console.info(`[Instagram Growth Autopilot] ${message}`),
   logError = (error) => console.error("[Instagram Growth Autopilot]", error),
 } = {}) {
@@ -379,45 +348,28 @@ export function installFollowupBackground({
 
   let engine = providedEngine;
   let store = providedStore;
-  if (!engine || !store) ({ engine, store } = remoteConnection
-    ? composeRemoteRuntime(chromeApi, log, { connection: remoteConnection })
-    : composeLocalRuntime(chromeApi, log));
-
-  const connectionStore = chromeApi.storage?.local?.get && chromeApi.storage?.local?.set
-    ? createFollowupConnectionStore({ storage: chromeApi.storage.local })
-    : null;
-  const liveTest = connectionStore ? createLiveAcceleratedTest({ storage: chromeApi.storage.local }) : null;
-  let runtimeReady = Promise.resolve();
-  if (!providedEngine && !providedStore && !remoteConnection && connectionStore) {
-    runtimeReady = Promise.all([connectionStore.loadConnection(), liveTest.load()]).then(async ([connection]) => {
-      if (!connection) return;
-      ({ engine, store } = composeRemoteRuntime(chromeApi, log, { connection, liveTest }));
-    }).catch((error) => { logError(error); });
-  }
-
-  async function pairLocalService({ baseUrl, pairingToken, handle }) {
-    if (!connectionStore) throw new Error("Chrome local storage is required for pairing.");
-    const pairingClient = createFollowupServiceClient({ baseUrl, pairingToken });
-    const account = await pairingClient.provision(handle);
-    const nextConnection = {
-      baseUrl,
-      pairingToken,
-      accountId: account.accountId,
-      normalizedHandle: account.normalizedHandle,
-    };
-    const previousState = await store.load();
-    const nextRuntime = composeRemoteRuntime(chromeApi, log, { connection: nextConnection, liveTest });
-    const snapshot = await nextRuntime.client.readEngineState();
-    if (account.created || isUninitializedRemoteState(snapshot.state)) {
-      await nextRuntime.client.replaceEngineState(snapshot.revision, previousState);
+  if (!engine || !store) ({ engine, store } = composeLocalRuntime(chromeApi, log));
+  const health = providedHealth || createFollowupHealth({
+    storage: chromeApi.storage.local,
+    notify: async ({ title, message }) => {
+      if (chromeApi.notifications?.create) await chromeApi.notifications.create({ type: "basic", iconUrl: "assets/icon128.png", title, message });
+    },
+  });
+  const runWithHealth = async (operation) => {
+    try {
+      const value = await operation();
+      await health.recordSuccess();
+      return value;
+    } catch (error) {
+      const status = await health.recordFailure(error);
+      if (status.nextRetryAt) await chromeApi.alarms.create(INSTAGRAM_GROWTH_RETRY, { when: Date.parse(status.nextRetryAt) });
+      throw error;
     }
-    await connectionStore.saveConnection(nextConnection);
-    engine = nextRuntime.engine;
-    store = nextRuntime.store;
-    await engine.reconcileStartup?.({ serviceWorkerActivated: true });
-    const state = await engine.getState();
-    return { ok: true, account, state };
-  }
+  };
+  const runtimeReady = Promise.resolve().then(async () => {
+    await chromeApi.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" });
+    return runWithHealth(() => engine.reconcileStartup?.({ serviceWorkerActivated: true }));
+  });
 
   try {
     const configured = chromeApi.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true });
@@ -429,30 +381,13 @@ export function installFollowupBackground({
   chromeApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!LOCAL_MESSAGE_TYPES.has(message?.type)) return false;
     runtimeReady.then(async () => {
-      if (message.type === "PAIR_LOCAL_FOLLOWUP_SERVICE") return pairLocalService(message.payload || {});
-      if (message.type === "GET_LOCAL_FOLLOWUP_CONNECTION") {
-        const connection = await connectionStore?.loadConnection();
-        return { ok: true, connected: Boolean(connection), baseUrl: connection?.baseUrl, accountId: connection?.accountId };
-      }
-      if (message.type === "START_LIVE_ACCELERATED_TEST") {
-        if (!connectionStore || !liveTest) throw new Error("Live accelerated testing requires the paired local service.");
-        const sourceId = message.payload?.sourceId;
-        const current = await engine.getState();
-        const source = current.sources.find((candidate) => candidate.id === sourceId);
-        if (!source) throw new Error("Choose an existing source for the live test.");
-        await liveTest.start({ sourceId });
-        await engine.startLiveTest(sourceId, LIVE_TEST_SOURCE_LIMIT);
-        return { ok: true, state: await engine.getState(), liveTest: liveTest.getSession() };
-      }
-      if (message.type === "STOP_AUTO" && liveTest?.getSession()?.active) {
-        const current = await engine.getState();
-        if (current.run?.liveTestSourceId && typeof engine.stopLiveTest === "function") {
-          await engine.stopLiveTest();
-          await liveTest.stop();
-          return { ok: true, state: await engine.getState() };
-        }
-      }
-      return handleLocalIntent(message, { chromeApi, engine, store });
+      if (message.type === "GET_FOLLOWUP_HEALTH") return { ok: true, health: await health.get() };
+      if (message.type === "RETRY_FOLLOWUP_WORK") return runWithHealth(async () => {
+        await engine.reconcileStartup?.({ serviceWorkerActivated: true });
+        await engine.runDueWork();
+        return { ok: true, state: await engine.getState(), health: await health.get() };
+      });
+      return handleLocalIntent(message, { chromeApi, engine, store, health });
     })
       .then(sendResponse)
       .catch((error) => {
@@ -463,20 +398,26 @@ export function installFollowupBackground({
   });
 
   chromeApi.alarms.onAlarm.addListener((alarm) => {
-    if (alarm?.name !== INSTAGRAM_FOLLOWUP_NEXT_WORK) return undefined;
-    return runtimeReady.then(() => engine.runDueWork()).catch(logError);
+    if (alarm?.name === INSTAGRAM_FOLLOWUP_NEXT_WORK) {
+      return runtimeReady.then(() => runWithHealth(() => engine.runDueWork())).catch(logError);
+    }
+    if (alarm?.name === INSTAGRAM_GROWTH_RETRY) {
+      return runtimeReady.then(() => runWithHealth(async () => {
+        await engine.reconcileStartup?.({ serviceWorkerActivated: true });
+        return engine.runDueWork();
+      })).catch(logError);
+    }
+    return undefined;
   });
 
   const reconcileStartup = (options) => {
     return runtimeReady.then(() => {
       if (typeof engine.reconcileStartup !== "function") return undefined;
-      return engine.reconcileStartup(options);
+      return runWithHealth(() => engine.reconcileStartup(options));
     }).catch(logError);
   };
   chromeApi.runtime.onStartup?.addListener(reconcileStartup);
   chromeApi.runtime.onInstalled?.addListener(reconcileStartup);
-  void reconcileStartup({ serviceWorkerActivated: true });
-
   return {
     get engine() { return engine; },
     get store() { return store; },

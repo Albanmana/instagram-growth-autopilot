@@ -357,25 +357,10 @@ test("the four accessible sections default to Autopilot and switch one panel at 
   });
 });
 
-test("Settings pairs a loopback service and migrates the current local state", { concurrency: false }, async () => {
-  await withPanel({
-    intentHandler: async (message, state) => {
-      if (message.type !== "PAIR_LOCAL_FOLLOWUP_SERVICE") return undefined;
-      return { ok: true, account: { normalizedHandle: "alban", created: true }, state };
-    },
-  }, async ({ document, messages }) => {
+test("Settings explains that durable data stays in this browser", { concurrency: false }, async () => {
+  await withPanel({}, async ({ document }) => {
     await document.getElementById("nav-settings").trigger("click");
-    document.getElementById("service-url-input").value = "http://127.0.0.1:4317";
-    document.getElementById("service-handle-input").value = "@Alban";
-    document.getElementById("service-token-input").value = "a-valid-local-pairing-token-value-123456";
-    await document.getElementById("service-connect-button").trigger("click");
-    const request = messages.find(({ type }) => type === "PAIR_LOCAL_FOLLOWUP_SERVICE");
-    assert.deepEqual(request.payload, {
-      baseUrl: "http://127.0.0.1:4317",
-      handle: "@Alban",
-      pairingToken: "a-valid-local-pairing-token-value-123456",
-    });
-    assert.equal(document.getElementById("service-token-input").value, "");
+    assert.equal(document.getElementById("service-connect-button"), null);
   });
 });
 
@@ -751,11 +736,7 @@ test("Sources sends add, remove, and Scan now intents and counts verified follow
     await scan;
     assert.match(document.getElementById("live-run-message").textContent, /scan queued/i);
 
-    const liveTestButton = document.getElementById("source-list").children[0].children[1].children[1];
-    await liveTestButton.trigger("click");
-    assert.deepEqual(messages.at(-1), { type: "START_LIVE_ACCELERATED_TEST", payload: { sourceId: "source-a" } });
-
-    const removeButton = document.getElementById("source-list").children[0].children[1].children[2];
+    const removeButton = document.getElementById("source-list").children[0].children[1].children[1];
     await removeButton.trigger("click");
     assert.deepEqual(messages.at(-1), { type: "REMOVE_SOURCE", payload: { sourceId: "source-a" } });
 

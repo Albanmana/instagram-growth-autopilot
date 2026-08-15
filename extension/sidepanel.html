@@ -158,19 +158,13 @@
       <section id="settings-section" class="view" role="tabpanel" aria-labelledby="nav-settings" tabindex="0" hidden>
         <article class="card" aria-labelledby="persistence-heading">
           <p class="eyebrow">Persistent local data</p>
-          <h2 id="persistence-heading">Connect local Supabase</h2>
-          <p id="service-connection-status" class="muted">Not connected: this extension is using its local browser cache.</p>
-          <div class="settings-grid">
-            <label class="field span-two" for="service-url-input"><span>Local service URL</span><input id="service-url-input" type="url" value="http://127.0.0.1:4317" autocomplete="off" /></label>
-            <label class="field" for="service-handle-input"><span>Your Instagram handle</span><input id="service-handle-input" type="text" placeholder="your_handle" autocomplete="off" /></label>
-            <label class="field" for="service-token-input"><span>Pairing token</span><input id="service-token-input" type="password" autocomplete="new-password" /></label>
-          </div>
-          <button id="service-connect-button" class="primary full-width" type="button">Connect and migrate local data</button>
+          <h2 id="persistence-heading">Stored in this browser</h2>
+          <p class="muted">Sources, queue, history, and scheduling stay in Chrome Storage on this device.</p>
         </article>
         <article class="card" aria-labelledby="settings-heading">
           <p class="eyebrow">Product controls</p>
           <h2 id="settings-heading">Cadence and retention</h2>
-          <p class="muted">These values apply to the single global action lane and persist in the connected local database.</p>
+          <p class="muted">These values apply to the single global action lane and persist in Chrome Storage on this device.</p>
           <div class="settings-grid">
             <label class="field" for="batch-size-input"><span>Accounts per cycle</span><input id="batch-size-input" type="number" min="1" step="1" /></label>
             <label class="field" for="unfollow-delay-days-input"><span>Follow-back review after follow (days, J+2)</span><input id="unfollow-delay-days-input" type="number" min="1" step="any" /></label>
@@ -197,12 +191,14 @@
 
         <article class="card danger-zone" aria-labelledby="data-heading">
           <p class="eyebrow">Local data</p>
-          <h2 id="data-heading">Export or reset</h2>
-          <p class="muted">Export creates a JSON file on this device. Reset cannot be undone.</p>
+          <h2 id="data-heading">Export, import, or reset</h2>
+          <p class="muted">Import replaces the current local state after stopping the autopilot. Reset cannot be undone.</p>
           <div class="button-grid two-columns">
             <button id="export-button" class="secondary" type="button">Export JSON</button>
+            <button id="import-button" class="secondary" type="button">Import JSON</button>
             <button id="reset-button" class="danger" type="button">Reset Local Data</button>
           </div>
+          <input id="import-file-input" type="file" accept="application/json,.json" hidden />
         </article>
       </section>
     </main>

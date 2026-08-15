@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createFollowupStore } from "../extension/followup-store.js";
+import {
+  INSTAGRAM_GROWTH_STATE_KEY,
+  createFollowupStore,
+} from "../extension/followup-store.js";
 
 const fixedNow = () => new Date("2026-08-13T01:00:00.000Z");
 
@@ -22,6 +25,28 @@ function fakeStorage(calls = [], initialData = {}) {
   };
 }
 
+test("migrates a version-1 local state into the version-2 growth key", async () => {
+  const legacyState = {
+    version: 1,
+    automationEnabled: true,
+    settings: { batchSize: 10 },
+    sources: [],
+    candidates: [],
+    run: { phase: "idle", activeBatch: null },
+    history: [],
+  };
+  const storage = fakeStorage([], { instagramFollowupState: legacyState });
+  const store = createFollowupStore({ storage, now: fixedNow });
+
+  const state = await store.load();
+
+  assert.equal(state.version, 2);
+  assert.equal(state.automationEnabled, true);
+  assert.equal(state.settings.batchSize, 10);
+  assert.deepEqual(storage.data[INSTAGRAM_GROWTH_STATE_KEY], state);
+  assert.deepEqual(storage.data.instagramFollowupState, legacyState);
+});
+
 test("migrates a missing state to local defaults without reading Cold DM keys", async () => {
   const calls = [];
   const store = createFollowupStore({ storage: fakeStorage(calls), now: fixedNow });
@@ -29,7 +54,7 @@ test("migrates a missing state to local defaults without reading Cold DM keys", 
   const state = await store.load();
 
   assert.deepEqual(state, {
-    version: 1,
+    version: 2,
     automationEnabled: false,
     settings: {
       perSourceLimit: 200,
@@ -51,7 +76,7 @@ test("migrates a missing state to local defaults without reading Cold DM keys", 
     run: { phase: "idle", activeBatch: null },
     history: [],
   });
-  assert.deepEqual(calls, [["instagramFollowupState"]]);
+  assert.deepEqual(calls, [["instagramGrowthAutopilotState", "instagramFollowupState"]]);
 });
 
 test("exports local state and reset replaces only it with a disabled empty state", async () => {
@@ -60,12 +85,42 @@ test("exports local state and reset replaces only it with a disabled empty state
   const store = createFollowupStore({ storage, now: fixedNow });
 
   const exported = JSON.parse(await store.exportJson());
-  assert.equal(exported.version, 1);
+  assert.equal(exported.version, 2);
   await store.reset();
 
   assert.equal((await store.load()).automationEnabled, false);
   assert.equal(storage.data.unrelatedSetting, "keep");
   assert.equal(calls.some((call) => call[0] === "clear"), false);
+});
+
+test("imports a version-1 JSON export into the canonical version-2 local state", async () => {
+  const storage = fakeStorage([], { unrelatedSetting: "keep" });
+  const store = createFollowupStore({ storage, now: fixedNow });
+
+  const imported = await store.importJson(JSON.stringify({
+    version: 1,
+    automationEnabled: true,
+    settings: { batchSize: 10 },
+    sources: [],
+    candidates: [],
+    run: { phase: "idle", activeBatch: null },
+    history: [],
+  }));
+
+  assert.equal(imported.version, 2);
+  assert.equal(imported.automationEnabled, true);
+  assert.equal(imported.settings.batchSize, 10);
+  assert.deepEqual(storage.data[INSTAGRAM_GROWTH_STATE_KEY], imported);
+  assert.equal(storage.data.unrelatedSetting, "keep");
+});
+
+test("rejects malformed import JSON without changing the stored state", async () => {
+  const storage = fakeStorage([], { [INSTAGRAM_GROWTH_STATE_KEY]: { version: 2, automationEnabled: true } });
+  const store = createFollowupStore({ storage, now: fixedNow });
+
+  await assert.rejects(store.importJson("not json"), /valid JSON/i);
+
+  assert.deepEqual(storage.data[INSTAGRAM_GROWTH_STATE_KEY], { version: 2, automationEnabled: true });
 });
 
 test("updates a pure synchronous state mutation with exactly one normalized write", async () => {
@@ -82,7 +137,7 @@ test("updates a pure synchronous state mutation with exactly one normalized writ
   assert.equal(updated.automationEnabled, true);
   assert.equal(updated.settings.batchSize, 10);
   assert.deepEqual(calls.filter((call) => call[0] === "set").length, 1);
-  assert.deepEqual(storage.data.instagramFollowupState, updated);
+  assert.deepEqual(storage.data.instagramGrowthAutopilotState, updated);
 });
 
 test("rejects asynchronous update mutators before persisting", async () => {

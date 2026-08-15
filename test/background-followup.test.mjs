@@ -43,47 +43,6 @@ test("local runtime composes direct modal collection separately from the profile
   assert.notEqual(engineDependencies.collectAndFollowFollowers, engineDependencies.performAction);
 });
 
-test("remote runtime composes the existing engine with the revisioned remote store", () => {
-  let dependencies;
-  const runtime = background.composeRemoteRuntime({ storage: { local: {} }, tabs: {}, scripting: {}, alarms: { create() {}, clear() {} } }, () => {}, {
-    connection: { baseUrl: "http://127.0.0.1:4317", pairingToken: "a-valid-local-pairing-token-value-123456", accountId: "account-1" },
-    createClient: () => ({ readEngineState() {}, replaceEngineState() {} }),
-    createStore: () => ({ load() {}, save() {}, update() {} }),
-    createTabs: () => ({}),
-    createFollowers: () => ({ collectFollowers() {}, collectOwnFollowerHandles() {}, collectAndFollowFollowers() {} }),
-    createRelationshipGateway: () => () => {},
-    createEngine: (value) => { dependencies = value; return { marker: "remote" }; },
-  });
-  assert.equal(runtime.engine.marker, "remote");
-  assert.equal(typeof dependencies.store.load, "function");
-});
-
-test("remote runtime accelerates lifecycle alarms but leaves safety alarms in real time", async () => {
-  let dependencies;
-  const alarms = [];
-  const runtime = background.composeRemoteRuntime({
-    storage: { local: {} }, tabs: {}, scripting: {},
-    alarms: { create: (_name, details) => alarms.push(details), clear() {} },
-  }, () => {}, {
-    connection: { baseUrl: "http://127.0.0.1:4317", pairingToken: "a-valid-local-pairing-token-value-123456", accountId: "account-1" },
-    liveTest: {
-      now: () => new Date("2026-08-14T12:00:00.000Z"),
-      toAlarmTime: (at, { safety } = {}) => new Date(at.getTime() + (safety ? 0 : 123)),
-    },
-    createClient: () => ({ readEngineState() {}, replaceEngineState() {} }),
-    createStore: () => ({ load() {}, save() {}, update() {} }),
-    createTabs: () => ({}),
-    createFollowers: () => ({ collectFollowers() {}, collectOwnFollowerHandles() {}, collectAndFollowFollowers() {} }),
-    createRelationshipGateway: () => () => {},
-    createEngine: (value) => { dependencies = value; return { marker: "remote" }; },
-  });
-  assert.equal(runtime.engine.marker, "remote");
-  const at = new Date("2026-08-14T12:01:00.000Z");
-  await dependencies.schedule(at, "ignored", { safety: false });
-  await dependencies.schedule(at, "ignored", { safety: true });
-  assert.deepEqual(alarms.map(({ when }) => when), [at.getTime() + 123, at.getTime()]);
-});
-
 function eventHarness() {
   const listeners = [];
   return {
@@ -222,6 +181,11 @@ function installBackgroundHarness() {
     async exportJson() {
       return "{\"version\":1}";
     },
+    async importJson(json) {
+      calls.importJson = json;
+      state = { ...state, ...JSON.parse(json) };
+      return structuredClone(state);
+    },
     async reset() {
       this.resetCalls += 1;
       state = {
@@ -337,7 +301,10 @@ test("only service-worker activation requests interrupted-operation recovery cla
 test("runtime exposes every local follow-up intent and no sender fallback", async () => {
   const { runtime, engine, store, calls } = installBackgroundHarness();
 
-  assert.deepEqual(await runtime.send({ type: "GET_FOLLOWUP_STATE" }), {
+  const stateResponse = await runtime.send({ type: "GET_FOLLOWUP_STATE" });
+  assert.equal(stateResponse.health.status, "healthy");
+  delete stateResponse.health;
+  assert.deepEqual(stateResponse, {
     ok: true,
     state: await engine.getState(),
     scheduler: { status: "idle", plannedAt: null, alarmAt: null },
@@ -394,11 +361,22 @@ test("runtime exposes every local follow-up intent and no sender fallback", asyn
     ok: true,
     json: "{\"version\":1}",
   });
+  const imported = await runtime.send({
+    type: "IMPORT_FOLLOWUP_STATE",
+    payload: { json: "{\"version\":2,\"automationEnabled\":false}" },
+  });
+  assert.equal(calls.importJson, "{\"version\":2,\"automationEnabled\":false}");
+  assert.equal(imported.ok, true);
+  assert.equal(imported.state.version, 2);
+  assert.equal(imported.scheduler.status, "idle");
+  assert.equal(imported.health.status, "healthy");
+  assert.equal(engine.reconcileStartupCalls, 2);
+  assert.deepEqual(calls.reconcileStartup.at(-1), { serviceWorkerActivated: true });
   assert.deepEqual(await runtime.send({ type: "RESET_FOLLOWUP_STATE" }), {
     ok: true,
     state: await engine.getState(),
   });
-  assert.equal(engine.stopCalls, 2);
+  assert.equal(engine.stopCalls, 3);
   assert.equal(store.resetCalls, 1);
 
   assert.equal(await runtime.send({ type: "START_BATCH" }), undefined);
@@ -428,23 +406,6 @@ test("state inspection rearms a missing Chrome alarm from the persisted next-wor
     plannedAt: dueAt,
     alarmAt: dueAt,
   });
-});
-
-test("stopping an active live test clears both its engine fence and wall-clock session", async () => {
-  const { runtime, engine, calls } = installBackgroundHarness();
-  await runtime.send({ type: "ADD_SOURCE", payload: { input: "@alice", limit: 10 } });
-
-  const started = await runtime.send({
-    type: "START_LIVE_ACCELERATED_TEST",
-    payload: { sourceId: "instagram-source:alice" },
-  });
-  assert.equal(started.ok, true);
-  assert.deepEqual(calls.startLiveTest, [{ sourceId: "instagram-source:alice", limit: 10 }]);
-
-  const stopped = await runtime.send({ type: "STOP_AUTO" });
-  assert.equal(stopped.ok, true);
-  assert.equal(engine.stopCalls, 1);
-  assert.equal(Object.hasOwn(stopped.state.run, "liveTestSourceId"), false);
 });
 
 test("settings validation failures are returned to the caller without direct persistence", async () => {
@@ -485,7 +446,8 @@ test("manifest needs no tabs permission or legacy scrape content scripts", async
 
   assert.equal(manifest.permissions.includes("tabs"), false);
   assert.equal(Object.hasOwn(manifest, "content_scripts"), false);
-  assert.deepEqual(manifest.host_permissions, ["https://www.instagram.com/*", "http://127.0.0.1/*"]);
+  assert.deepEqual(manifest.host_permissions, ["https://www.instagram.com/*"]);
+  assert.equal(manifest.permissions.includes("unlimitedStorage"), true);
 });
 
 test("only the local follow-up alarm delegates due work", async () => {
