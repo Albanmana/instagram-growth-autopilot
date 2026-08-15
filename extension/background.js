@@ -23,6 +23,7 @@ const LOCAL_MESSAGE_TYPES = new Set([
   "STOP_AUTO",
   "SAVE_FOLLOWUP_SETTINGS",
   "EXPORT_FOLLOWUP_STATE",
+  "IMPORT_FOLLOWUP_STATE",
   "RESET_FOLLOWUP_STATE",
   "GET_FOLLOWUP_HEALTH",
   "RETRY_FOLLOWUP_WORK",
@@ -312,6 +313,17 @@ async function handleLocalIntent(message, { chromeApi, engine, store, health }) 
     }
     case "EXPORT_FOLLOWUP_STATE":
       return { ok: true, json: await store.exportJson() };
+    case "IMPORT_FOLLOWUP_STATE": {
+      await engine.stop();
+      const state = await store.importJson(payload.json);
+      await engine.reconcileStartup({ serviceWorkerActivated: true });
+      return {
+        ok: true,
+        state,
+        scheduler: await verifyScheduledAlarm(chromeApi, state),
+        health: await health?.get(),
+      };
+    }
     case "RESET_FOLLOWUP_STATE": {
       await engine.stop();
       await store.reset();

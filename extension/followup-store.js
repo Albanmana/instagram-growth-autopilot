@@ -342,6 +342,20 @@ export function createFollowupStore({ storage, now = () => new Date() }) {
     return JSON.stringify(buildLocalExport(await load()));
   }
 
+  async function importJson(json) {
+    if (typeof json !== "string") throw new Error("The import file must contain JSON text.");
+    let parsed;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      throw new Error("The import file is not valid JSON.");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("The import file must contain a growth state object.");
+    }
+    return save(parsed);
+  }
+
   function reset() {
     return save(createEmptyFollowupState());
   }
@@ -351,6 +365,7 @@ export function createFollowupStore({ storage, now = () => new Date() }) {
     save,
     update,
     exportJson,
+    importJson,
     reset,
     [FOLLOWUP_STORE_SYNCHRONIZATION_KEY]: storage,
   };

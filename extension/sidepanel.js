@@ -835,6 +835,22 @@ async function exportState() {
   }
 }
 
+async function importState(file) {
+  if (!file) return;
+  try {
+    const json = await file.text();
+    const response = await sendMessage({ type: "IMPORT_FOLLOWUP_STATE", payload: { json } });
+    settingsInitialized = false;
+    activity = null;
+    renderPersistedState(response);
+    showNotice("Local state imported. Review the schedule before resuming autopilot.");
+  } catch (error) {
+    showNotice(error.message, true);
+  } finally {
+    $("import-file-input").value = "";
+  }
+}
+
 async function resetState() {
   if (!window.confirm("Reset all local sources, candidates, history, and settings?")) return;
   try {
@@ -873,6 +889,8 @@ $("follow-back-review-button").addEventListener("click", runFollowBackReview);
 $("run-next-cycle-button").addEventListener("click", runNextCycleNow);
 $("settings-save-button").addEventListener("click", saveSettings);
 $("export-button").addEventListener("click", exportState);
+$("import-button").addEventListener("click", () => $("import-file-input").click());
+$("import-file-input").addEventListener("change", (event) => importState(event.target.files?.[0]));
 $("reset-button").addEventListener("click", resetState);
 
 for (const id of [
@@ -883,6 +901,7 @@ for (const id of [
   "add-source-button",
   "settings-save-button",
   "export-button",
+  "import-button",
   "reset-button",
   "follow-back-review-button",
   "run-next-cycle-button",

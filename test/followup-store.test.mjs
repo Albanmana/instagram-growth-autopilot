@@ -93,6 +93,36 @@ test("exports local state and reset replaces only it with a disabled empty state
   assert.equal(calls.some((call) => call[0] === "clear"), false);
 });
 
+test("imports a version-1 JSON export into the canonical version-2 local state", async () => {
+  const storage = fakeStorage([], { unrelatedSetting: "keep" });
+  const store = createFollowupStore({ storage, now: fixedNow });
+
+  const imported = await store.importJson(JSON.stringify({
+    version: 1,
+    automationEnabled: true,
+    settings: { batchSize: 10 },
+    sources: [],
+    candidates: [],
+    run: { phase: "idle", activeBatch: null },
+    history: [],
+  }));
+
+  assert.equal(imported.version, 2);
+  assert.equal(imported.automationEnabled, true);
+  assert.equal(imported.settings.batchSize, 10);
+  assert.deepEqual(storage.data[INSTAGRAM_GROWTH_STATE_KEY], imported);
+  assert.equal(storage.data.unrelatedSetting, "keep");
+});
+
+test("rejects malformed import JSON without changing the stored state", async () => {
+  const storage = fakeStorage([], { [INSTAGRAM_GROWTH_STATE_KEY]: { version: 2, automationEnabled: true } });
+  const store = createFollowupStore({ storage, now: fixedNow });
+
+  await assert.rejects(store.importJson("not json"), /valid JSON/i);
+
+  assert.deepEqual(storage.data[INSTAGRAM_GROWTH_STATE_KEY], { version: 2, automationEnabled: true });
+});
+
 test("updates a pure synchronous state mutation with exactly one normalized write", async () => {
   const calls = [];
   const storage = fakeStorage(calls);

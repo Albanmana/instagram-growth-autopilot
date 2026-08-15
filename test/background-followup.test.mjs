@@ -181,6 +181,11 @@ function installBackgroundHarness() {
     async exportJson() {
       return "{\"version\":1}";
     },
+    async importJson(json) {
+      calls.importJson = json;
+      state = { ...state, ...JSON.parse(json) };
+      return structuredClone(state);
+    },
     async reset() {
       this.resetCalls += 1;
       state = {
@@ -356,11 +361,22 @@ test("runtime exposes every local follow-up intent and no sender fallback", asyn
     ok: true,
     json: "{\"version\":1}",
   });
+  const imported = await runtime.send({
+    type: "IMPORT_FOLLOWUP_STATE",
+    payload: { json: "{\"version\":2,\"automationEnabled\":false}" },
+  });
+  assert.equal(calls.importJson, "{\"version\":2,\"automationEnabled\":false}");
+  assert.equal(imported.ok, true);
+  assert.equal(imported.state.version, 2);
+  assert.equal(imported.scheduler.status, "idle");
+  assert.equal(imported.health.status, "healthy");
+  assert.equal(engine.reconcileStartupCalls, 2);
+  assert.deepEqual(calls.reconcileStartup.at(-1), { serviceWorkerActivated: true });
   assert.deepEqual(await runtime.send({ type: "RESET_FOLLOWUP_STATE" }), {
     ok: true,
     state: await engine.getState(),
   });
-  assert.equal(engine.stopCalls, 2);
+  assert.equal(engine.stopCalls, 3);
   assert.equal(store.resetCalls, 1);
 
   assert.equal(await runtime.send({ type: "START_BATCH" }), undefined);

@@ -1,8 +1,5 @@
 .env
-local-service/.env
 .DS_Store
 .worktrees/
 .playwright/
 node_modules/
-supabase/.branches/
-supabase/.temp/
