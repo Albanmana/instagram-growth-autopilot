@@ -13,6 +13,7 @@ export const INSTAGRAM_FOLLOWUP_STATE_KEY = INSTAGRAM_GROWTH_STATE_KEY;
 export const FOLLOWUP_STORE_SYNCHRONIZATION_KEY = Symbol("followupStoreSynchronizationKey");
 
 const STORAGE_OPERATION_QUEUES = new WeakMap();
+const PRIVATE_FOLLOW_REQUEST_GATEWAY_FAILURE = "Instagram relationship script returned no structured result.";
 
 function storageQueue(storage) {
   return STORAGE_OPERATION_QUEUES.get(storage) || Promise.resolve();
@@ -234,6 +235,50 @@ function remapSourceIds(values, aliases) {
   }))];
 }
 
+function isRejectedPrivateFollowRequest(entry) {
+  return entry?.action === "follow"
+    && entry.status === "failed"
+    && entry.reason === PRIVATE_FOLLOW_REQUEST_GATEWAY_FAILURE
+    && typeof entry.candidateId === "string"
+    && entry.candidateId;
+}
+
+function repairRejectedPrivateFollowRequests({ settings, candidates, history }) {
+  const requestsByCandidateId = new Map();
+  for (const entry of history) {
+    if (!isRejectedPrivateFollowRequest(entry)) continue;
+    const previous = requestsByCandidateId.get(entry.candidateId);
+    if (!previous || (entry.at || entry.timestamp) > (previous.at || previous.timestamp)) {
+      requestsByCandidateId.set(entry.candidateId, entry);
+    }
+  }
+  if (!requestsByCandidateId.size) return { candidates, history, repaired: false };
+
+  const repairedHistory = history.map((entry) => isRejectedPrivateFollowRequest(entry)
+    ? { ...entry, status: "follow_request_sent", reason: null }
+    : entry);
+  const repairedCandidates = candidates.map((candidate) => {
+    const request = requestsByCandidateId.get(candidate.id);
+    if (!request || candidate.status !== "skipped") return candidate;
+    const followedAt = candidate.followedAt || request.at || request.timestamp;
+    const unfollowDueAt = candidate.unfollowDueAt || new Date(
+      new Date(followedAt).getTime() + (settings.unfollowDelayDays * 86_400_000),
+    ).toISOString();
+    const repaired = {
+      ...candidate,
+      status: "followed",
+      followedAt,
+      unfollowDueAt,
+      followBackStatus: candidate.followBackStatus || "unknown",
+      followBackReviewDueAt: candidate.followBackReviewDueAt || unfollowDueAt,
+    };
+    delete repaired.nextAction;
+    delete repaired.failedAt;
+    return repaired;
+  });
+  return { candidates: repairedCandidates, history: repairedHistory, repaired: true };
+}
+
 function normalizeFollowupState(rawState, now, { allowMissing = false, migrateLegacy = false } = {}) {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new Error("now must be a valid date.");
   if (rawState === undefined && allowMissing) return createEmptyFollowupState();
@@ -261,12 +306,13 @@ function normalizeFollowupState(rawState, now, { allowMissing = false, migrateLe
     ...(Array.isArray(entry.sourceIds) ? { sourceIds: remapSourceIds(entry.sourceIds, migrated.aliases) } : {}),
   }) : entry);
   const run = normalizeRun(rawState.run);
+  const repaired = repairRejectedPrivateFollowRequests({ settings, candidates, history });
   const exported = buildLocalExport({
     settings,
     sources,
-    candidates,
+    candidates: repaired.candidates,
     run,
-    history,
+    history: repaired.history,
   });
 
   return clone({
@@ -306,7 +352,9 @@ export function createFollowupStore({ storage, now = () => new Date() }) {
       now(),
       { allowMissing: true, migrateLegacy: true },
     );
-    if (storedState === undefined && legacyState !== undefined) {
+    const needsPrivateRequestRepair = Array.isArray(storedState?.history)
+      && storedState.history.some(isRejectedPrivateFollowRequest);
+    if ((storedState === undefined && legacyState !== undefined) || needsPrivateRequestRepair) {
       await storage.set({ [INSTAGRAM_GROWTH_STATE_KEY]: state });
     }
     return state;

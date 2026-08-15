@@ -79,6 +79,59 @@ test("migrates a missing state to local defaults without reading Cold DM keys", 
   assert.deepEqual(calls, [["instagramGrowthAutopilotState", "instagramFollowupState"]]);
 });
 
+test("repairs historical private follow requests rejected only by the relationship gateway", async () => {
+  const storage = fakeStorage([], {
+    [INSTAGRAM_GROWTH_STATE_KEY]: {
+      version: 2,
+      automationEnabled: true,
+      sources: [],
+      candidates: [{
+        id: "instagram:privatealice",
+        handle: "privatealice",
+        profileUrl: "https://www.instagram.com/privatealice/",
+        normalizedHandle: "privatealice",
+        sourceIds: [],
+        status: "skipped",
+        createdAt: "2026-08-15T20:50:59.000Z",
+        updatedAt: "2026-08-15T20:50:59.000Z",
+      }],
+      run: { phase: "idle", activeBatch: null },
+      history: [{
+        candidateId: "instagram:privatealice",
+        action: "follow",
+        kind: "follow",
+        handle: "privatealice",
+        sourceIds: [],
+        status: "failed",
+        reason: "Instagram relationship script returned no structured result.",
+        timestamp: "2026-08-15T20:50:59.000Z",
+        at: "2026-08-15T20:50:59.000Z",
+      }],
+    },
+  });
+  const store = createFollowupStore({ storage, now: fixedNow });
+
+  const state = await store.load();
+
+  assert.deepEqual(state.history[0], {
+    candidateId: "instagram:privatealice",
+    action: "follow",
+    kind: "follow",
+    handle: "privatealice",
+    sourceIds: [],
+    status: "follow_request_sent",
+    reason: null,
+    timestamp: "2026-08-15T20:50:59.000Z",
+    at: "2026-08-15T20:50:59.000Z",
+  });
+  assert.equal(state.candidates[0].status, "followed");
+  assert.equal(state.candidates[0].followedAt, "2026-08-15T20:50:59.000Z");
+  assert.equal(state.candidates[0].unfollowDueAt, "2026-08-17T20:50:59.000Z");
+  assert.equal(state.candidates[0].followBackStatus, "unknown");
+  assert.equal(state.candidates[0].followBackReviewDueAt, "2026-08-17T20:50:59.000Z");
+  assert.deepEqual(storage.data[INSTAGRAM_GROWTH_STATE_KEY], state);
+});
+
 test("exports local state and reset replaces only it with a disabled empty state", async () => {
   const calls = [];
   const storage = fakeStorage(calls, { unrelatedSetting: "keep" });
