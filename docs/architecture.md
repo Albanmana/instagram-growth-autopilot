@@ -28,7 +28,9 @@ No additional host permission is required for the documented local runtime.
 ## Persisted local state
 
 All state is one versioned record under `chrome.storage.local` key
-`instagramFollowupState`:
+`instagramGrowthAutopilotState` (schema version 2). An existing
+`instagramFollowupState` record is converted once on startup and retained only
+as a rollback copy:
 
 - `automationEnabled` — whether automatic work may run (default `false`);
 - `settings` — the validated timing and queue limits;

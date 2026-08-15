@@ -244,12 +244,17 @@ export function composeLocalRuntime(chromeApi, log, {
   return { engine, store };
 }
 
-async function handleLocalIntent(message, { chromeApi, engine, store }) {
+async function handleLocalIntent(message, { chromeApi, engine, store, health }) {
   const payload = message.payload || {};
   switch (message.type) {
     case "GET_FOLLOWUP_STATE": {
       const state = await engine.getState();
-      return { ok: true, state, scheduler: await verifyScheduledAlarm(chromeApi, state) };
+      return {
+        ok: true,
+        state,
+        scheduler: await verifyScheduledAlarm(chromeApi, state),
+        health: await health?.get(),
+      };
     }
     case "ADD_SOURCE": {
       const source = await engine.addSource(payload.input, payload.limit);
@@ -370,7 +375,7 @@ export function installFollowupBackground({
         await engine.runDueWork();
         return { ok: true, state: await engine.getState(), health: await health.get() };
       });
-      return handleLocalIntent(message, { chromeApi, engine, store });
+      return handleLocalIntent(message, { chromeApi, engine, store, health });
     })
       .then(sendResponse)
       .catch((error) => {

@@ -296,7 +296,10 @@ test("only service-worker activation requests interrupted-operation recovery cla
 test("runtime exposes every local follow-up intent and no sender fallback", async () => {
   const { runtime, engine, store, calls } = installBackgroundHarness();
 
-  assert.deepEqual(await runtime.send({ type: "GET_FOLLOWUP_STATE" }), {
+  const stateResponse = await runtime.send({ type: "GET_FOLLOWUP_STATE" });
+  assert.equal(stateResponse.health.status, "healthy");
+  delete stateResponse.health;
+  assert.deepEqual(stateResponse, {
     ok: true,
     state: await engine.getState(),
     scheduler: { status: "idle", plannedAt: null, alarmAt: null },

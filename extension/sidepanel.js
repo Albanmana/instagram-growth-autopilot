@@ -69,6 +69,11 @@ function renderPersistedState(response) {
   stateRevision += 1;
   schedulerHealth = response.scheduler || null;
   render(response.state);
+  if (response.health?.status === "retry_scheduled") {
+    showNotice(`Autopilot retry scheduled for ${formatDateTime(response.health.nextRetryAt)}. ${response.health.lastErrorMessage || ""}`.trim(), true);
+  } else if (response.health?.status === "intervention_required") {
+    showNotice(`Autopilot needs attention: ${response.health.lastErrorMessage || "Open Instagram and retry."}`, true);
+  }
 }
 
 function selectSection(section) {
