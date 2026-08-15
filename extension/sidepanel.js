@@ -62,20 +62,6 @@ async function sendMessage(message) {
   return response;
 }
 
-async function refreshConnectionStatus() {
-  try {
-    const response = await sendMessage({ type: "GET_LOCAL_FOLLOWUP_CONNECTION" });
-    const status = $("service-connection-status");
-    if (response.connected) {
-      status.textContent = `Connected to local Supabase (${response.baseUrl}).`;
-      $("service-url-input").value = response.baseUrl;
-      $("service-connect-button").textContent = "Reconnect local Supabase";
-    }
-  } catch {
-    // The main state view stays usable if the service is not configured yet.
-  }
-}
-
 function renderPersistedState(response) {
   if (!response?.state || typeof response.state !== "object") {
     throw new Error("The local follow-up engine returned no persisted state.");
@@ -220,7 +206,6 @@ function renderSources(state) {
     const meta = document.createElement("span");
     const actions = document.createElement("div");
     const scan = document.createElement("button");
-    const liveTest = document.createElement("button");
     const remove = document.createElement("button");
 
     title.textContent = sourceLabel(source);
@@ -235,28 +220,6 @@ function renderSources(state) {
     scan.setAttribute("aria-label", `Scan ${sourceLabel(source)} now`);
     scan.disabled = locked;
     scan.addEventListener("click", () => scanSource(source.id, scan));
-
-    liveTest.type = "button";
-    liveTest.className = "text-button";
-    liveTest.textContent = "Live test · 10";
-    liveTest.setAttribute("aria-label", `Run a ten-profile live test from ${sourceLabel(source)}`);
-    liveTest.disabled = locked;
-    liveTest.addEventListener("click", async () => {
-      try {
-        liveTest.disabled = true;
-        beginActivity("Starting live 10-profile test", "live-test");
-        const response = await sendMessage({ type: "START_LIVE_ACCELERATED_TEST", payload: { sourceId: source.id } });
-        renderPersistedState(response);
-        activity.status = "active";
-        activity.label = "Live test active";
-        renderLiveStatus(response.state);
-        showNotice("Live test active: calendar checks are accelerated; Instagram action spacing is unchanged.");
-      } catch (error) {
-        liveTest.disabled = false;
-        activity = null;
-        showNotice(error.message, true);
-      }
-    });
 
     remove.type = "button";
     remove.className = "text-danger";
@@ -275,7 +238,7 @@ function renderSources(state) {
       }
     });
 
-    actions.append(scan, liveTest, remove);
+    actions.append(scan, remove);
     item.append(details, actions);
     list.appendChild(item);
   }
@@ -851,22 +814,6 @@ async function saveSettings() {
   }
 }
 
-async function connectLocalService() {
-  const baseUrl = $("service-url-input").value.trim();
-  const handle = $("service-handle-input").value.trim();
-  const pairingToken = $("service-token-input").value.trim();
-  try {
-    if (!baseUrl || !handle || !pairingToken) throw new Error("Enter the local service URL, your Instagram handle, and the pairing token.");
-    const response = await sendMessage({ type: "PAIR_LOCAL_FOLLOWUP_SERVICE", payload: { baseUrl, handle, pairingToken } });
-    $("service-token-input").value = "";
-    renderPersistedState(response);
-    await refreshConnectionStatus();
-    showNotice(`Connected local Supabase for @${response.account.normalizedHandle}.`);
-  } catch (error) {
-    showNotice(error.message, true);
-  }
-}
-
 async function exportState() {
   try {
     const response = await sendMessage({ type: "EXPORT_FOLLOWUP_STATE" });
@@ -920,7 +867,6 @@ $("stop-button").addEventListener("click", () => applyControl("STOP_AUTO"));
 $("follow-back-review-button").addEventListener("click", runFollowBackReview);
 $("run-next-cycle-button").addEventListener("click", runNextCycleNow);
 $("settings-save-button").addEventListener("click", saveSettings);
-$("service-connect-button").addEventListener("click", connectLocalService);
 $("export-button").addEventListener("click", exportState);
 $("reset-button").addEventListener("click", resetState);
 
@@ -954,4 +900,3 @@ window.addEventListener("pagehide", () => {
   stopCountdown();
 });
 startPolling();
-void refreshConnectionStatus();
