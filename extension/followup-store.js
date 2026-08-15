@@ -6,7 +6,10 @@ import {
   sourceIdFromProfileUrl,
 } from "./followup-model.js";
 
-export const INSTAGRAM_FOLLOWUP_STATE_KEY = "instagramFollowupState";
+export const INSTAGRAM_GROWTH_STATE_KEY = "instagramGrowthAutopilotState";
+export const LEGACY_INSTAGRAM_FOLLOWUP_STATE_KEY = "instagramFollowupState";
+// Keep the previous export name as a compatibility alias for extension modules.
+export const INSTAGRAM_FOLLOWUP_STATE_KEY = INSTAGRAM_GROWTH_STATE_KEY;
 export const FOLLOWUP_STORE_SYNCHRONIZATION_KEY = Symbol("followupStoreSynchronizationKey");
 
 const STORAGE_OPERATION_QUEUES = new WeakMap();
@@ -23,7 +26,7 @@ function exclusiveForStorage(storage, operation) {
 
 export function createEmptyFollowupState() {
   return {
-    version: 1,
+    version: 2,
     automationEnabled: false,
     settings: { ...DEFAULT_FOLLOWUP_SETTINGS },
     sources: [],
@@ -235,7 +238,9 @@ function normalizeFollowupState(rawState, now, { allowMissing = false, migrateLe
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new Error("now must be a valid date.");
   if (rawState === undefined && allowMissing) return createEmptyFollowupState();
   if (typeof rawState !== "object" || Array.isArray(rawState)) throw new Error("Follow-up state must be an object.");
-  if (rawState.version !== undefined && rawState.version !== 1) throw new Error("Unsupported follow-up state version.");
+  if (rawState.version !== undefined && rawState.version !== 1 && rawState.version !== 2) {
+    throw new Error("Unsupported follow-up state version.");
+  }
   if (rawState.sources !== undefined && !Array.isArray(rawState.sources)) throw new Error("Follow-up state sources must be an array.");
   if (rawState.candidates !== undefined && !Array.isArray(rawState.candidates)) throw new Error("Follow-up state candidates must be an array.");
   if (rawState.history !== undefined && !Array.isArray(rawState.history)) throw new Error("Follow-up state history must be an array.");
@@ -275,6 +280,11 @@ function normalizeFollowupState(rawState, now, { allowMissing = false, migrateLe
   });
 }
 
+export function normalizeGrowthState(rawState, now, options = {}) {
+  const normalized = normalizeFollowupState(rawState, now, options);
+  return { ...normalized, version: 2 };
+}
+
 export function createFollowupStore({ storage, now = () => new Date() }) {
   if (!storage || typeof storage.get !== "function" || typeof storage.set !== "function") {
     throw new Error("Follow-up storage must provide get and set.");
@@ -285,13 +295,26 @@ export function createFollowupStore({ storage, now = () => new Date() }) {
   }
 
   async function loadRaw() {
-    const { [INSTAGRAM_FOLLOWUP_STATE_KEY]: storedState } = await storage.get([INSTAGRAM_FOLLOWUP_STATE_KEY]);
-    return normalizeFollowupState(storedState, now(), { allowMissing: true, migrateLegacy: true });
+    const stored = await storage.get([
+      INSTAGRAM_GROWTH_STATE_KEY,
+      LEGACY_INSTAGRAM_FOLLOWUP_STATE_KEY,
+    ]);
+    const storedState = stored[INSTAGRAM_GROWTH_STATE_KEY];
+    const legacyState = stored[LEGACY_INSTAGRAM_FOLLOWUP_STATE_KEY];
+    const state = normalizeGrowthState(
+      storedState === undefined ? legacyState : storedState,
+      now(),
+      { allowMissing: true, migrateLegacy: true },
+    );
+    if (storedState === undefined && legacyState !== undefined) {
+      await storage.set({ [INSTAGRAM_GROWTH_STATE_KEY]: state });
+    }
+    return state;
   }
 
   async function saveRaw(state) {
-    const normalized = normalizeFollowupState(state, now());
-    await storage.set({ [INSTAGRAM_FOLLOWUP_STATE_KEY]: normalized });
+    const normalized = normalizeGrowthState(state, now());
+    await storage.set({ [INSTAGRAM_GROWTH_STATE_KEY]: normalized });
     return clone(normalized);
   }
 
