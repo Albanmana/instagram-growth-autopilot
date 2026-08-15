@@ -625,6 +625,7 @@ function renderLifecycle(state) {
   $("add-source-button").disabled = locked;
   $("settings-save-button").disabled = locked;
   $("export-button").disabled = false;
+  $("import-button").disabled = locked;
   $("reset-button").disabled = locked;
   $("follow-back-review-button").disabled = locked;
   renderNextWork(state);

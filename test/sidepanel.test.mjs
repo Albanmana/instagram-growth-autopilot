@@ -815,6 +815,7 @@ test("Settings persists J+2 and J+7 retention with advanced timing and validates
     assert.equal(document.getElementById("batch-size-input").value, "25");
     assert.equal(document.getElementById("follow-back-unfollow-delay-days-input").value, "7");
     assert.equal(document.getElementById("source-rescan-hours-input").value, "6");
+    assert.equal(document.getElementById("import-button").disabled, false);
     assert.match(document.getElementById("advanced-settings").getAttribute("aria-label"), /advanced timing/i);
 
     document.getElementById("unfollow-delay-days-input").value = "3";
