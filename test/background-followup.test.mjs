@@ -517,6 +517,27 @@ test("relationship gateway waits for the new profile document before injecting o
   assert.deepEqual(calls.close, [42]);
 });
 
+test("relationship gateway preserves a successful private-account follow request", async () => {
+  const closed = [];
+  const gateway = createInstagramRelationshipGateway({
+    async openTabAndWait() {
+      return { id: 43 };
+    },
+    async waitForProfile() {},
+    async executeScript() {
+      return [{ result: { status: "follow_request_sent", at: "2026-08-15T20:50:59.000Z" } }];
+    },
+    async closeTab(tabId) {
+      closed.push(tabId);
+    },
+  });
+
+  const result = await gateway({ expectedHandle: "skool.dr", action: "follow" });
+
+  assert.deepEqual(result, { status: "follow_request_sent", at: "2026-08-15T20:50:59.000Z" });
+  assert.deepEqual(closed, [43]);
+});
+
 test("relationship gateway opens the queued target profile for an unfollow", async () => {
   const opened = [];
   const gateway = createInstagramRelationshipGateway({

@@ -204,7 +204,7 @@ export function createInstagramRelationshipGateway({
         throw new Error(execution.error.message || "Instagram relationship script failed.");
       }
       const result = execution?.result;
-      if (!result || !["succeeded", "skipped", "failed"].includes(result.status)) {
+      if (!result || !["succeeded", "follow_request_sent", "skipped", "failed"].includes(result.status)) {
         throw new Error("Instagram relationship script returned no structured result.");
       }
       return result;
