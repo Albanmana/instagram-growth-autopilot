@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Instagram Growth Autopilot</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="logo" aria-hidden="true">IG</div>
+      <div>
+        <h1>Growth Autopilot</h1>
+        <p>Private, local Instagram follow/unfollow</p>
+      </div>
+    </header>
+
+    <nav id="section-nav" class="section-nav" aria-label="Follow-up sections" role="tablist">
+      <button id="nav-autopilot" type="button" role="tab" aria-selected="true" aria-controls="autopilot-section" tabindex="0" data-section="autopilot">Autopilot</button>
+      <button id="nav-sources" type="button" role="tab" aria-selected="false" aria-controls="sources-section" tabindex="-1" data-section="sources">Sources</button>
+      <button id="nav-growth" type="button" role="tab" aria-selected="false" aria-controls="growth-section" tabindex="-1" data-section="growth">Growth</button>
+      <button id="nav-settings" type="button" role="tab" aria-selected="false" aria-controls="settings-section" tabindex="-1" data-section="settings">Settings</button>
+    </nav>
+
+    <main>
+      <p id="panel-status" class="notice" role="status" aria-live="polite" hidden></p>
+
+      <section id="autopilot-section" class="view" role="tabpanel" aria-labelledby="nav-autopilot" tabindex="0">
+        <article class="card hero-card" aria-labelledby="automation-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Autopilot</p>
+              <h2 id="automation-heading">One global action lane</h2>
+            </div>
+            <span id="phase-pill" class="pill">Ready</span>
+          </div>
+          <p id="automation-status" class="muted">Autopilot off · Ready</p>
+          <p id="recovery-notice" class="recovery-notice" role="alert" hidden>
+            An interrupted action was skipped automatically and recorded in the local activity log. Autopilot is resuming.
+          </p>
+          <div class="lifecycle-controls">
+            <button id="start-auto-button" class="primary lifecycle-primary" type="button">Start Autopilot</button>
+            <button id="pause-button" class="primary lifecycle-primary" type="button" hidden>Pause Autopilot</button>
+            <button id="resume-button" class="primary lifecycle-primary" type="button" hidden>Resume Autopilot</button>
+            <button id="stop-button" class="quiet-danger" type="button" hidden>Stop</button>
+          </div>
+          <div id="live-run-status" class="live-status" role="status" aria-live="polite" hidden>
+            <span class="live-pulse" aria-hidden="true"></span>
+            <span id="live-run-message"></span>
+          </div>
+        </article>
+
+        <article class="card next-card" aria-labelledby="next-heading">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Up next</p>
+              <h2 id="next-heading">Next global work</h2>
+            </div>
+            <span id="next-work-state" class="pill">Ready</span>
+          </div>
+          <p id="next-work" class="next-work">Add a source to begin</p>
+          <p id="next-work-countdown" class="next-countdown" aria-live="off" hidden></p>
+          <p id="next-work-detail" class="muted next-detail"></p>
+          <p id="next-work-scheduled-at" class="muted next-scheduled-at" hidden></p>
+          <p id="next-work-alarm-status" class="muted next-scheduled-at" hidden></p>
+          <button id="run-next-cycle-button" class="secondary full-width" type="button" hidden>Run next cycle now</button>
+          <div id="next-work-preview-wrap" class="next-preview-wrap" hidden>
+            <p class="eyebrow">Then</p>
+            <ol id="next-work-preview" class="next-preview" aria-label="Upcoming queued accounts"></ol>
+          </div>
+        </article>
+
+        <article id="operational-timeline-card" class="card" aria-labelledby="calendar-heading">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Calendar</p>
+              <h2 id="calendar-heading">Next 48 hours</h2>
+            </div>
+            <span class="pill">Plan</span>
+          </div>
+          <ol id="operational-timeline" class="next-preview" aria-label="Scheduled and projected autopilot work"></ol>
+        </article>
+
+        <article class="card" aria-labelledby="week-heading">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">Last 7 days</p>
+              <h2 id="week-heading">Growth snapshot</h2>
+            </div>
+          </div>
+          <div class="metric-grid three-columns">
+            <div class="metric"><span>Verified follows</span><strong id="weekly-follow-count">0</strong></div>
+            <div class="metric"><span>Follow-backs</span><strong id="autopilot-confirmed-count">0</strong></div>
+            <div class="metric"><span>Conversion</span><strong id="autopilot-conversion-rate">0%</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section id="sources-section" class="view" role="tabpanel" aria-labelledby="nav-sources" tabindex="0" hidden>
+        <article class="card" aria-labelledby="add-source-heading">
+          <p class="eyebrow">Finite inputs</p>
+          <h2 id="add-source-heading">Add an Instagram source</h2>
+          <p class="muted">Autopilot scans only the profiles you add here. Nothing is sent to a remote service.</p>
+          <label class="field" for="source-input">
+            <span>Instagram profile URL or handle</span>
+            <input id="source-input" type="text" placeholder="@creator or instagram.com/creator" autocomplete="off" />
+          </label>
+          <label class="field" for="source-limit-input">
+            <span>Maximum profiles from this source</span>
+            <input id="source-limit-input" type="number" min="1" step="1" value="200" inputmode="numeric" />
+          </label>
+          <button id="add-source-button" class="primary full-width" type="button">Add Source</button>
+        </article>
+
+        <article class="card" aria-labelledby="sources-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Collection queue</p>
+              <h2 id="sources-heading">Sources</h2>
+            </div>
+            <span id="source-count" class="count">0</span>
+          </div>
+          <ul id="source-list" class="item-list source-list" aria-live="polite"></ul>
+          <p id="sources-empty" class="empty">No sources added yet.</p>
+        </article>
+      </section>
+
+      <section id="growth-section" class="view" role="tabpanel" aria-labelledby="nav-growth" tabindex="0" hidden>
+        <article class="card" aria-labelledby="lifecycle-heading">
+          <p class="eyebrow">Persisted lifecycle</p>
+          <div class="section-heading-row">
+            <h2 id="lifecycle-heading">Growth metrics</h2>
+            <button id="follow-back-review-button" class="icon-button" type="button" aria-label="Check follow-backs now" title="Check follow-backs now">↻</button>
+          </div>
+          <div class="metric-grid">
+            <div class="metric"><span>Confirmed follow-backs</span><strong id="confirmed-followback-count">0</strong></div>
+            <div class="metric"><span>Follow-back conversion</span><strong id="conversion-rate">0%</strong></div>
+            <div class="metric"><span>Waiting for review</span><strong id="waiting-count">0</strong></div>
+            <div class="metric warning"><span>Due unfollows</span><strong id="due-unfollow-count">0</strong></div>
+          </div>
+        </article>
+
+        <article class="card" aria-labelledby="queue-heading">
+          <p class="eyebrow">Queue health</p>
+          <h2 id="queue-heading">Accounts waiting to follow</h2>
+          <strong id="backlog-count" class="big-number">0 / 500</strong>
+          <div class="progress" aria-hidden="true"><i id="backlog-progress"></i></div>
+        </article>
+
+        <article class="card" aria-labelledby="history-heading">
+          <p class="eyebrow">Local activity</p>
+          <h2 id="history-heading">Recent history</h2>
+          <ul id="history-list" class="item-list history-list"></ul>
+          <p id="history-empty" class="empty">No actions recorded yet.</p>
+        </article>
+      </section>
+
+      <section id="settings-section" class="view" role="tabpanel" aria-labelledby="nav-settings" tabindex="0" hidden>
+        <article class="card" aria-labelledby="persistence-heading">
+          <p class="eyebrow">Persistent local data</p>
+          <h2 id="persistence-heading">Connect local Supabase</h2>
+          <p id="service-connection-status" class="muted">Not connected: this extension is using its local browser cache.</p>
+          <div class="settings-grid">
+            <label class="field span-two" for="service-url-input"><span>Local service URL</span><input id="service-url-input" type="url" value="http://127.0.0.1:4317" autocomplete="off" /></label>
+            <label class="field" for="service-handle-input"><span>Your Instagram handle</span><input id="service-handle-input" type="text" placeholder="your_handle" autocomplete="off" /></label>
+            <label class="field" for="service-token-input"><span>Pairing token</span><input id="service-token-input" type="password" autocomplete="new-password" /></label>
+          </div>
+          <button id="service-connect-button" class="primary full-width" type="button">Connect and migrate local data</button>
+        </article>
+        <article class="card" aria-labelledby="settings-heading">
+          <p class="eyebrow">Product controls</p>
+          <h2 id="settings-heading">Cadence and retention</h2>
+          <p class="muted">These values apply to the single global action lane and persist in the connected local database.</p>
+          <div class="settings-grid">
+            <label class="field" for="batch-size-input"><span>Accounts per cycle</span><input id="batch-size-input" type="number" min="1" step="1" /></label>
+            <label class="field" for="unfollow-delay-days-input"><span>Follow-back review after follow (days, J+2)</span><input id="unfollow-delay-days-input" type="number" min="1" step="any" /></label>
+            <label class="field span-two" for="follow-back-unfollow-delay-days-input"><span>Keep confirmed follow-backs after confirmation (days, J+7)</span><input id="follow-back-unfollow-delay-days-input" type="number" min="1" step="any" /></label>
+          </div>
+
+          <details id="advanced-settings" class="advanced" aria-label="Advanced timing and queue settings">
+            <summary>Advanced timing</summary>
+            <div class="settings-grid">
+              <label class="field" for="per-source-limit-input"><span>Default source limit</span><input id="per-source-limit-input" type="number" min="1" step="1" /></label>
+              <label class="field" for="backlog-maximum-input"><span>Backlog maximum</span><input id="backlog-maximum-input" type="number" min="1" step="1" /></label>
+              <label class="field" for="refill-threshold-input"><span>Refill threshold</span><input id="refill-threshold-input" type="number" min="1" step="1" /></label>
+              <label class="field" for="source-rescan-hours-input"><span>Rescan a completed source after (hours)</span><input id="source-rescan-hours-input" type="number" min="1" step="any" /></label>
+              <label class="field" for="cycle-interval-hours-input"><span>Global cycle every (hours)</span><input id="cycle-interval-hours-input" type="number" min="1" step="any" /></label>
+              <label class="field" for="active-follow-cap-input"><span>Active follow safety cap</span><input id="active-follow-cap-input" type="number" min="1" step="1" /></label>
+              <label class="field" for="action-delay-min-seconds-input"><span>Action delay min (seconds)</span><input id="action-delay-min-seconds-input" type="number" min="1" step="any" /></label>
+              <label class="field" for="action-delay-max-seconds-input"><span>Action delay max (seconds)</span><input id="action-delay-max-seconds-input" type="number" min="1" step="any" /></label>
+              <label class="field" for="batch-delay-min-minutes-input"><span>Cycle pause min (minutes)</span><input id="batch-delay-min-minutes-input" type="number" min="1" step="any" /></label>
+              <label class="field" for="batch-delay-max-minutes-input"><span>Cycle pause max (minutes)</span><input id="batch-delay-max-minutes-input" type="number" min="1" step="any" /></label>
+            </div>
+          </details>
+          <button id="settings-save-button" class="primary full-width" type="button">Save Settings</button>
+        </article>
+
+        <article class="card danger-zone" aria-labelledby="data-heading">
+          <p class="eyebrow">Local data</p>
+          <h2 id="data-heading">Export or reset</h2>
+          <p class="muted">Export creates a JSON file on this device. Reset cannot be undone.</p>
+          <div class="button-grid two-columns">
+            <button id="export-button" class="secondary" type="button">Export JSON</button>
+            <button id="reset-button" class="danger" type="button">Reset Local Data</button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

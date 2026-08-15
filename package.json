@@ -1,0 +1,22 @@
+{
+  "name": "instagram-growth-autopilot",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "service:setup": "node local-service/setup.mjs",
+    "service:start": "node --env-file=local-service/.env local-service/index.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:service-db": "FOLLOWUP_SERVICE_DB_TEST=1 node --test test/relational-followup-state.test.mjs",
+    "test:followup-model": "node --test test/followup-model.test.mjs",
+    "test:e2e": "node test/e2e/run-extension-e2e.mjs",
+    "test:e2e:service": "FOLLOWUP_E2E_SERVICE=1 node --env-file=local-service/.env test/e2e/run-extension-e2e.mjs",
+    "test:e2e:live": "node test/e2e/run-live-smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.3"
+  }
+}
