@@ -1,5 +1,14 @@
 import { normalizeSourceInput } from "./followup-model.js";
 
+export const SOURCE_UNAVAILABLE_ERROR_CODE = "SOURCE_UNAVAILABLE";
+
+function scriptError(value) {
+  const payload = value && typeof value === "object" ? value : { message: String(value || "Instagram script failed.") };
+  const error = new Error(payload.message || "Instagram script failed.");
+  if (typeof payload.code === "string") error.code = payload.code;
+  return error;
+}
+
 export function normalizeInstagramProfileTarget(rawValue) {
   const value = String(rawValue || "").trim();
   if (!value) {
@@ -125,6 +134,15 @@ export async function openProfileListModal(
         return { error: "The loaded Instagram profile does not match the expected source." };
       }
 
+      const pageText = normalize([
+        document.body?.innerText,
+        document.documentElement?.innerText,
+        ...Array.from(document.querySelectorAll("main, section, article")).map((element) => element.innerText || element.textContent),
+      ].filter(Boolean).join(" "));
+      if (/\bpage (?:is|isn't|is not) (?:currently )?available\b|\bpage unavailable\b|cette page n[’']est malheureusement pas disponible/i.test(pageText)) {
+        return { error: { code: "SOURCE_UNAVAILABLE", message: "Instagram says this source profile is unavailable." } };
+      }
+
       const dialogSelector = "div[role='dialog'], section[role='dialog']";
       const dialogsBeforeClick = new Set(document.querySelectorAll(dialogSelector));
       if (Array.from(dialogsBeforeClick).some(isVisible)) {
@@ -188,12 +206,8 @@ export async function openProfileListModal(
     },
   });
 
-  if (result?.error) {
-    throw new Error(result.error.message ?? JSON.stringify(result.error));
-  }
-  if (result?.result?.error) {
-    throw new Error(result.result.error);
-  }
+  if (result?.error) throw scriptError(result.error);
+  if (result?.result?.error) throw scriptError(result.result.error);
   if (!result?.result?.dialogToken) {
     throw new Error(`The ${sourceType} script returned no bound dialog token.`);
   }

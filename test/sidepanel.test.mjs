@@ -572,6 +572,31 @@ test("a ready follow queue identifies its first account and says the global lane
   });
 });
 
+test("a due unfollow waiting behind a persisted source retry is shown as scheduled", { concurrency: false }, async () => {
+  const now = Date.parse("2026-08-13T10:00:00.000Z");
+  const retryAt = "2026-08-13T10:06:00.000Z";
+  await withPanel({
+    now,
+    state: dashboardState({
+      automationEnabled: true,
+      phase: "waiting",
+      dueUnfollows: 1,
+      sources: [source("source-a", "source")],
+      run: {
+        cycle: { dueAt: "2026-08-13T10:00:00.000Z", stage: "collect" },
+        sourceScanSourceId: "source-a",
+        nextSourceScanAt: retryAt,
+        nextWorkAt: retryAt,
+      },
+    }),
+  }, async ({ document, intervals }) => {
+    assert.equal(document.getElementById("next-work-state").textContent, "Scheduled");
+    assert.equal(document.getElementById("next-work").textContent, "Unfollow @due_0 · 1 ready");
+    assert.equal(document.getElementById("next-work-countdown").textContent, "in 06:00");
+    assert.equal(intervals.some(({ delay }) => delay === 1_000), true);
+  });
+});
+
 test("active scanning never fabricates a countdown", { concurrency: false }, async () => {
   await withPanel({
     state: dashboardState({

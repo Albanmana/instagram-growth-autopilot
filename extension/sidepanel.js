@@ -444,12 +444,17 @@ function nextWorkModel(state, now = new Date()) {
   }
 
   const dueCandidates = dueUnfollowCandidates(state, now);
-  if (dueCandidates.length) return {
-    state: "ready",
-    title: `Unfollow @${dueCandidates[0].handle} · ${dueCandidates.length} ready`,
-    detail: "Starting in the global action lane now.",
-    preview: queuedActionPreview(state, "unfollow", dueCandidates),
-  };
+  if (dueCandidates.length) {
+    const deadline = validDeadline(state.run?.nextWorkAt);
+    const delayed = deadline && deadline > now;
+    return {
+      state: delayed ? "scheduled" : "ready",
+      title: `Unfollow @${dueCandidates[0].handle} · ${dueCandidates.length} ready`,
+      detail: delayed ? "Waiting for the persisted global action-lane wake." : "Starting in the global action lane now.",
+      ...(delayed ? { deadline } : {}),
+      preview: queuedActionPreview(state, "unfollow", dueCandidates),
+    };
+  }
 
   const pending = pendingCandidates.length;
   const nowIso = now.toISOString();

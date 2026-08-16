@@ -13,6 +13,7 @@ import {
 import { FOLLOWUP_STORE_SYNCHRONIZATION_KEY } from "./followup-store.js";
 
 export const INSTAGRAM_FOLLOWUP_NEXT_ALARM = "INSTAGRAM_FOLLOWUP_NEXT_WORK";
+const SOURCE_UNAVAILABLE_ERROR_CODE = "SOURCE_UNAVAILABLE";
 
 const LEASE_DURATION_MS = 15 * 60_000;
 const PHASES = new Set([
@@ -1053,14 +1054,17 @@ export function createFollowupEngine({
     } catch (error) {
       activeCollectionController = null;
       const failedAt = currentDate().toISOString();
+      const unavailable = error?.code === SOURCE_UNAVAILABLE_ERROR_CODE;
       state = replaceSource(state, source.id, (current) => ({
         ...current,
-        status: "error",
-        warning: `Retryable source error: ${errorMessage(error)}`,
+        status: unavailable ? "unavailable" : "error",
+        warning: unavailable
+          ? `Source unavailable: ${errorMessage(error)}`
+          : `Retryable source error: ${errorMessage(error)}`,
         updatedAt: failedAt,
       }));
       state = await persist(state);
-      return { state, error };
+      return { state, error: unavailable ? null : error };
     }
   }
 
@@ -1209,7 +1213,7 @@ export function createFollowupEngine({
       return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
     };
     return [...state.sources]
-      .filter(({ status }) => status !== "collecting")
+      .filter(({ status }) => status !== "collecting" && status !== "unavailable")
       .sort((first, second) => balancedRotationTimestamp(first) - balancedRotationTimestamp(second))[0] || null;
   }
 
@@ -1421,6 +1425,10 @@ export function createFollowupEngine({
     }
 
     if (state.run.cycle) {
+      if (action === "unfollow" && state.run.cycle.stage === "collect") {
+        state = updateRun(state, { phase: "waiting", activeBatch: null }, ["nextWorkAt"]);
+        return scheduleNextGlobalWork(state, completedAt);
+      }
       if (action === "unfollow" && state.run.cycle.stage === "unfollow") {
         state = updateRun(state, { cycle: { ...state.run.cycle, stage: "follow" }, activeBatch: null });
         return beginCycleActions(state);
@@ -1503,9 +1511,12 @@ export function createFollowupEngine({
         state = recoverInterruptedCollection(state, current);
         state = reconcileInterruptedActionState(state, current);
         state = recoverPersistedInflightIntent(state, current);
+        state = promoteDueUnfollows(state, current);
 
+        const selectedWork = selectNextWork(state, current);
+        const dueUnfollow = selectedWork.kind === "action" && selectedWork.batch.kind === "unfollow";
         const futureDeadlines = [
-          futureRunDate(state.run.nextWorkAt, current, "nextWorkAt"),
+          dueUnfollow ? null : futureRunDate(state.run.nextWorkAt, current, "nextWorkAt"),
           futureRunDate(state.run.safetyDeadlineAt, current, "safetyDeadlineAt"),
         ].filter(Boolean);
         if (futureDeadlines.length) {
@@ -1514,11 +1525,18 @@ export function createFollowupEngine({
         state = updateRun(state, {}, ["nextWorkAt", "safetyDeadlineAt"]);
 
         state = refreshGlobalDeadlines(state, current);
-        state = promoteDueUnfollows(state, current);
         state = await persist(state);
 
         const futureCycle = futureBalancedCycleDate(state, current);
         if (futureCycle && !state.run.sourceScanSourceId) return scheduleAt(state, futureCycle);
+
+        if (dueUnfollow) {
+          if (!state.run.activeBatch) {
+            state = updateRun(state, { phase: "running_batch", activeBatch: selectedWork.batch });
+          }
+          state = await persist(state);
+          return processActiveAction(state);
+        }
 
         if (state.automationEnabled && state.run.cycle?.stage === "collect") {
           const sourceDue = !state.run.nextSourceScanAt

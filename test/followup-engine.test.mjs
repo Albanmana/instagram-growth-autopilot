@@ -335,6 +335,49 @@ test("a balanced collection error retries the same source before following", asy
   assert.equal(harness.calls.performAction.length, 0);
 });
 
+test("a due unfollow preempts a deferred balanced collection retry", async () => {
+  const retryAt = "2026-08-13T01:06:00.000Z";
+  const harness = createEngineHarness({
+    automationEnabled: true,
+    balancedCycles: true,
+    sources: [source("source-a", { status: "error" })],
+    candidates: [dueUnfollow("due")],
+    cycle: { dueAt: START, stage: "collect" },
+    sourceScanSourceId: "source-a",
+    nextSourceScanAt: retryAt,
+  });
+
+  await harness.engine.runDueWork();
+
+  assert.equal(harness.calls.collectFollowers.length, 0);
+  assert.equal(harness.calls.performAction[0].action, "unfollow");
+  assert.equal(harness.rawState().run.nextSourceScanAt, retryAt);
+  assert.equal(harness.calls.schedule.at(-1).at.toISOString(), retryAt);
+});
+
+test("an unavailable source stops retrying and lets a balanced cycle continue", async () => {
+  const unavailable = new Error("Instagram says this profile is unavailable.");
+  unavailable.code = "SOURCE_UNAVAILABLE";
+  const harness = createEngineHarness({
+    automationEnabled: true,
+    balancedCycles: true,
+    sources: [source("source-a")],
+    candidates: [pendingFollow("queued")],
+    collectResults: [unavailable],
+    cycle: { dueAt: START, stage: "collect" },
+    sourceScanSourceId: "source-a",
+    nextSourceScanAt: START,
+  });
+
+  await harness.engine.runDueWork();
+
+  const state = harness.rawState();
+  assert.equal(state.sources[0].status, "unavailable");
+  assert.match(state.sources[0].warning, /unavailable/i);
+  assert.equal(state.run.nextSourceScanAt, undefined);
+  assert.equal(harness.calls.performAction[0].action, "follow");
+});
+
 test("running the next balanced cycle now advances its persisted deadline without acting inline", async () => {
   const cycleDueAt = "2026-08-13T05:00:00.000Z";
   const harness = createEngineHarness({

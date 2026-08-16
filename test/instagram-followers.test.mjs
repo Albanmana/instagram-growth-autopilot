@@ -685,6 +685,26 @@ test("opens an exact followers trigger rendered outside semantic header or main 
   }
 });
 
+test("classifies Instagram's unavailable profile page before polling for a followers trigger", { concurrency: false }, async () => {
+  const unavailable = new InjectedElement("main");
+  unavailable.innerText = "Cette page n’est malheureusement pas disponible. Le lien que vous avez suivi est peut-être rompu.";
+  const dom = installInjectedDom({ pathname: "/missing.source/", roots: [unavailable] });
+
+  try {
+    await assert.rejects(
+      openProfileListModal(
+        injectedExecutor,
+        50,
+        "followers",
+        "https://www.instagram.com/missing.source/",
+      ),
+      (error) => error?.code === "SOURCE_UNAVAILABLE" && /unavailable/i.test(error.message),
+    );
+  } finally {
+    dom.restore();
+  }
+});
+
 test("falls back to the visible followers-count control when Instagram does not expose its canonical href", { concurrency: false }, async () => {
   const trigger = new InjectedElement("button", { text: "104 k followers" });
   const roots = [new InjectedElement("div").append(trigger)];
